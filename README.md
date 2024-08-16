@@ -36,9 +36,11 @@
 <img width="1080" alt="image" src="https://github.com/user-attachments/assets/d0337d2d-933c-4eb1-b4c0-92b510f2a6fe">
 
 - クローズ用ロジックアプリのオートメーション設定例
-![image](https://github.com/user-attachments/assets/0e792596-265d-44a5-b3db-8eee6a144dc8)
+  - トリガーが「**インシデントの更新時**」になることに注意 
+![image](https://github.com/user-attachments/assets/e0489e5f-d9e0-4543-8bb4-5dbe3a342538)
 
 - 起動用ロジックアプリのオートメーション設定例
+  - トリガーが「**インシデントが作成されたとき**」になることに注意 
   - お客様状況に応じて、通知させる条件 (データソースなど) を設定(フィルタ) してカスタマイズして下さい
 ![image](https://github.com/user-attachments/assets/c48a7d13-955f-439f-858c-766daaeffbb1)
 
