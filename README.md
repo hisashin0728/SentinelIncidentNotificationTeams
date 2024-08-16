@@ -37,16 +37,12 @@
 
 - クローズ用ロジックアプリのオートメーション設定例
   - トリガーが「**インシデントの更新時**」になることに注意
-<img src="https://github.com/user-attachments/assets/e0489e5f-d9e0-4543-8bb4-5dbe3a342538" width="300">
-***
-![image](https://github.com/user-attachments/assets/e0489e5f-d9e0-4543-8bb4-5dbe3a342538)
+<img src="https://github.com/user-attachments/assets/e0489e5f-d9e0-4543-8bb4-5dbe3a342538" width="500">
 
 - 起動用ロジックアプリのオートメーション設定例
   - トリガーが「**インシデントが作成されたとき**」になることに注意 
   - お客様状況に応じて、通知させる条件 (データソースなど) を設定(フィルタ) してカスタマイズして下さい
-<img src="https://github.com/user-attachments/assets/c48a7d13-955f-439f-858c-766daaeffbb1" width="300">
-***
-![image](https://github.com/user-attachments/assets/c48a7d13-955f-439f-858c-766daaeffbb1)
+<img src="https://github.com/user-attachments/assets/c48a7d13-955f-439f-858c-766daaeffbb1" width="500">
 
 # 免責事項
 
