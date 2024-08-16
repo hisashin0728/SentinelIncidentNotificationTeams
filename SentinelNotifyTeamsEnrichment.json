@@ -1,0 +1,281 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "metadata": {
+        "title": "SentinelNotifyTeamsEnrichment",
+        "description": "This playbook will notify Sentinel Incident to Microsoft Teams.",
+        "lastUpdateTime": "2024-08-16T00:00:00.000Z",
+        "tags": [ "Security" ],
+        "author": {
+            "name": "Hisashi Nakada"
+        }
+    },
+    "parameters": {
+        "PlayBookName": {
+            "defaultValue": "SentinelNotifyTeamsEnrichment",
+            "type": "String"
+        }
+    },
+    "variables": {
+        "MicrosoftSentinelConnectionName":  "[concat('MicrosoftSentinel-', parameters('PlaybookName'))]",
+        "MicrosoftSentinelConnectionApiId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Azuresentinel')]",
+        "MicrosoftTeamsConnectionName":  "[concat('MicrosoftTeams-', parameters('PlaybookName'))]"
+    },
+    "resources": [
+        {
+            "apiVersion": "2016-06-01",
+            "name": "[variables('MicrosoftSentinelConnectionName')]",
+            "type": "Microsoft.Web/connections",
+            "location": "[resourceGroup().location]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[variables('MicrosoftSentinelConnectionName')]",
+                "parameterValueType": "Alternative",
+                "api": {
+                    "id": "[variables('MicrosoftSentinelConnectionApiId')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('MicrosoftTeamsConnectionName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/teams')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('PlaybookName')]",
+            "location": "[resourceGroup().location]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "ForEach1": {
+                            "foreach": "@variables('IncidentEntities')",
+                            "actions": {
+                                "CreateHTMLTableEntities": {
+                                    "type": "Table",
+                                    "inputs": {
+                                        "from": "@array(items('ForEach1')['properties'])",
+                                        "format": "HTML"
+                                    }
+                                },
+                                "MessageRes1": {
+                                    "runAfter": {
+                                        "CreateHTMLTableEntities": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['teams']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "parentMessageId": "@body('NotifyTeams')?['id']",
+                                            "recipient": {
+                                                "groupId": "",
+                                                "channelId": ""
+                                            },
+                                            "messageBody": "<p>@{body('CreateHTMLTableEntities')}</p>"
+                                        },
+                                        "path": "/v1.0/teams/conversation/replyWithMessage/poster/@{encodeURIComponent('Flow bot')}/location/@{encodeURIComponent('Channel')}"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "IncidentEntities": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach",
+                            "runtimeConfiguration": {
+                                "concurrency": {
+                                    "repetitions": 1
+                                }
+                            }
+                        },
+                        "ForEach2": {
+                            "foreach": "@variables('IncidentComments')",
+                            "actions": {
+                                "MessageRes2": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['teams']['connectionId']"
+                                            }
+                                        },
+                                        "method": "post",
+                                        "body": {
+                                            "parentMessageId": "@body('NotifyTeams')?['id']",
+                                            "recipient": {
+                                                "groupId": "",
+                                                "channelId": ""
+                                            },
+                                            "messageBody": "<B>Summary</B><BR><blockquote>@{items('ForEach2')['properties']['message']}</blockquote>"
+                                        },
+                                        "path": "/v1.0/teams/conversation/replyWithMessage/poster/@{encodeURIComponent('Flow bot')}/location/@{encodeURIComponent('Channel')}"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "IncidentComments": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach",
+                            "runtimeConfiguration": {
+                                "concurrency": {
+                                    "repetitions": 1
+                                }
+                            }
+                        },
+                        "IncidentComments": {
+                            "runAfter": {
+                                "NotifyTeams": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "IncidentComments",
+                                        "type": "array",
+                                        "value": "@triggerBody()?['object']?['properties']?['Comments']"
+                                    }
+                                ]
+                            }
+                        },
+                        "IncidentEntities": {
+                            "runAfter": {
+                                "NotifyTeams": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "IncidentEntities",
+                                        "type": "array",
+                                        "value": "@triggerBody()?['object']?['properties']?['relatedEntities']"
+                                    }
+                                ]
+                            }
+                        },
+                        "NotifyTeams": {
+                            "runAfter": {},
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['teams']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "recipient": {
+                                        "groupId": "",
+                                        "channelId": ""
+                                    },
+                                    "messageBody": "{\n    \"type\": \"AdaptiveCard\",\n    \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n    \"version\": \"1.4\",\n    \"msteams\": {\n        \"width\": \"Full\"\n        },\n    \"body\": [\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"@{triggerBody()?['object']?['properties']?['title']}\",\n            \"wrap\": true,\n            \"fontType\": \"Default\",\n            \"size\": \"ExtraLarge\",\n            \"color\": \"Attention\",\n            \"isSubtle\": true\n        },\n        {\n            \"type\": \"ColumnSet\",\n            \"columns\": [\n                {\n                    \"type\": \"Column\",\n                    \"width\": \"stretch\",\n                    \"items\": [\n                        {\n                            \"type\": \"Image\",\n                            \"url\": \"https://azure.microsoft.com/svghandler/azure-sentinel?width=600&height=200\"\n                        }\n                    ]\n                },\n                {\n                    \"type\": \"Column\",\n                    \"width\": \"stretch\",\n                    \"items\": [\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"ID : @{triggerBody()?['object']?['properties']?['incidentNumber']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Lighter\",\n                            \"color\": \"Accent\"\n                        },\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"Sevirity : @{triggerBody()?['object']?['properties']?['severity']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Lighter\",\n                            \"color\": \"Accent\"\n                        },\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"Status : @{triggerBody()?['object']?['properties']?['status']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Bolder\",\n                            \"color\": \"Warning\"\n                        }, \n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \" @{triggerBody()?['object']?['properties']?['description']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Lighter\",\n                            \"color\": \"Default\"\n                        },\n        {\n            \"type\": \"ActionSet\",\n            \"actions\": [\n                {\n                    \"type\": \"Action.OpenUrl\",\n                    \"title\": \"Open Microsoft Sentinel\",\n                    \"url\": \"@{triggerBody()?['object']?['properties']?['incidentUrl']}\"\n                }\n            ]\n        }\n                    ]\n                }\n            ]\n        }\n    ]\n}"
+                                },
+                                "path": "/v1.0/teams/conversation/adaptivecard/poster/@{encodeURIComponent('User')}/location/@{encodeURIComponent('Channel')}"
+                            }
+                        },
+                        "インシデントを更新": {
+                            "runAfter": {
+                                "NotifyTeams": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "method": "put",
+                                "body": {
+                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                    "tagsToAdd": {
+                                        "TagsToAdd": [
+                                            {
+                                                "Tag": "@body('NotifyTeams')?['id']"
+                                            }
+                                        ]
+                                    },
+                                    "status": "Active"
+                                },
+                                "path": "/Incidents"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]",
+                                "connectionName": "[variables('MicrosoftSentinelConnectionName')]",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                },
+                                "id": "[variables('MicrosoftSentinelConnectionApiId')]"
+                            },
+                            "teams": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('MicrosoftTeamsConnectionName'))]",
+                                "connectionName": "[variables('MicrosoftTeamsConnectionName')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/teams')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
