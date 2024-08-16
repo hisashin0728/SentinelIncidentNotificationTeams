@@ -16,8 +16,26 @@
 # Deploy To Azure
 > 2つのロジックアプリをデプロイして下さい
 
+- ``SentinelNotifyTeamsEnrichment`` テンプレート
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fhisashin0728%2FSentinelIncidentNotificationTeams%2Fmain%2FSentinelNotifyTeamsEnrichment.json)
+
+- ``CloseSentinelIncidentEnrichment`` テンプレート
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)]
+(https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fhisashin0728%2FSentinelIncidentNotificationTeams%2Fmain%2FCloseSentinelIncidentEnrichment.json)
+
 # 設定作業
 > テンプレートデプロイ後、以下作業を行って下さい
 
 - ロジックアプリ (マネージドID) に対して、「Sentinel レスポンダー」ロールを付与して下さい
-- API より Teams チャネルに投稿可能なユーザー権限で認証を行って下さい 
+- API より Teams チャネルに投稿可能なユーザー権限で認証を行って下さい
+- Sentinel オートメーション設定を以下行って下さい
+  - クローズ用ロジックアプリ起動用のオートメーションを先に (以下例では ``ChangeStatus``)
+  - Teams 発砲用ロジックアプリのオートメションを次に (以下例では ``Send-Teams-Enrichment``)
+<img width="1080" alt="image" src="https://github.com/user-attachments/assets/d0337d2d-933c-4eb1-b4c0-92b510f2a6fe">
+
+- クローズ用ロジックアプリのオートメーション設定例
+![image](https://github.com/user-attachments/assets/0e792596-265d-44a5-b3db-8eee6a144dc8)
+
+- 起動用ロジックアプリのオートメーション設定例
+  - お客様状況に応じて、通知させる条件 (データソースなど) を設定(フィルタ) してカスタマイズして下さい
+![image](https://github.com/user-attachments/assets/c48a7d13-955f-439f-858c-766daaeffbb1)
