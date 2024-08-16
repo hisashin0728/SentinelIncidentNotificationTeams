@@ -17,11 +17,13 @@
 > 2つのロジックアプリをデプロイして下さい
 
 - ``SentinelNotifyTeamsEnrichment`` テンプレート
+  - Sentinel インシデントトリガーを用いて、Microsoft Teams に AdaptiveCard Format で通知します
+  - 後段で用いる ``CloseSentinelIncidentEnrichment`` のため、投稿したメッセージID をタグに付与させています<p>
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fhisashin0728%2FSentinelIncidentNotificationTeams%2Fmain%2FSentinelNotifyTeamsEnrichment.json)
 
 - ``CloseSentinelIncidentEnrichment`` テンプレート
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)]
-(https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fhisashin0728%2FSentinelIncidentNotificationTeams%2Fmain%2FCloseSentinelIncidentEnrichment.json)
+  - メッセージタグを読み取って、対象のチャネルにクローズされた情報を通知します<p>
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fhisashin0728%2FSentinelIncidentNotificationTeams%2Fmain%2FCloseSentinelIncidentEnrichment.json)
 
 # 設定作業
 > テンプレートデプロイ後、以下作業を行って下さい
