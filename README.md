@@ -23,7 +23,7 @@
 
 - ``CloseSentinelIncidentEnrichment`` テンプレート
   - メッセージタグを読み取って、対象のチャネルにクローズされた情報を通知します<p>
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fhisashin0728%2FSentinelIncidentNotificationTeams%2Fmain%2FCloseSentinelIncidentEnrichment.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fhisashin0728%2FSentinelIncidentNotificationTeams%2Fmain%2FCloseSentinelIncidentEnrichmentMaster.json)
 
 # 設定作業
 > テンプレートデプロイ後、以下作業を行って下さい
