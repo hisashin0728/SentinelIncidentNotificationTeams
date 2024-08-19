@@ -5,7 +5,7 @@
 > Sentinel インシデントトリガー時に、ターゲットの Teams チャネルに情報を発信します
 
 - 通知時
-  - Teams Adaptive Card Format を用いて、インシデント内容をメッセージに、インシデントに含まれるコメント/エンティティ情報を返信として通知します。
+  - [Teams Adaptive Card Format](https://learn.microsoft.com/ja-jp/microsoftteams/platform/task-modules-and-cards/cards/cards-reference#adaptive-card) を用いて、インシデント内容をメッセージに、インシデントに含まれるコメント/エンティティ情報を返信として通知します。
 ![image](https://github.com/user-attachments/assets/1f1ea47a-cd3f-47b0-aa9f-6724943ae787)
 - インシデントクローズ時
   - インシデントクローズ処理時を Sentinel オートメーションより起動し、Teams メッセージの更新情報として通知します
