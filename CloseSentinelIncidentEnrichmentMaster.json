@@ -1,0 +1,159 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "metadata": {
+        "title": "CloseSentinelIncidentEnrichment",
+        "description": "This playbook will add closed Incident information to Microsoft Teams.",
+        "lastUpdateTime": "2024-08-16T00:00:00.000Z",
+        "tags": [ "Security" ],
+        "author": {
+            "name": "Hisashi Nakada"
+        }
+    },
+    "parameters": {
+        "PlayBookName": {
+            "defaultValue": "CloseSentinelIncidentEnrichment",
+            "type": "String"
+        }
+    },
+    "variables": {
+        "MicrosoftSentinelConnectionName":  "[concat('MicrosoftSentinel-', parameters('PlaybookName'))]",
+        "MicrosoftSentinelConnectionApiId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Azuresentinel')]",
+        "MicrosoftTeamsConnectionName":  "[concat('MicrosoftTeams-', parameters('PlaybookName'))]"
+    },
+    "resources": [
+        {
+            "apiVersion": "2016-06-01",
+            "name": "[variables('MicrosoftSentinelConnectionName')]",
+            "type": "Microsoft.Web/connections",
+            "location": "[resourceGroup().location]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[variables('MicrosoftSentinelConnectionName')]",
+                "parameterValueType": "Alternative",
+                "api": {
+                    "id": "[variables('MicrosoftSentinelConnectionApiId')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('MicrosoftTeamsConnectionName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/teams')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('PlaybookName')]",
+            "location": "[resourceGroup().location]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "For_each": {
+                            "foreach": "@triggerBody()?['object']?['properties']?['labels']",
+                            "actions": {
+                                "CheckIncidentLabel": {
+                                    "actions": {
+                                        "TeamsRespondByAdaptiveCard": {
+                                            "runAfter": {},
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": {
+                                                    "messageBody": "{\n    \"type\": \"AdaptiveCard\",\n    \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n    \"version\": \"1.4\",\n    \"msteams\": {\n        \"width\": \"Full\"\n        },\n    \"body\": [\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"@{triggerBody()?['object']?['properties']?['title']}\",\n            \"wrap\": true,\n            \"fontType\": \"Default\",\n            \"size\": \"ExtraLarge\",\n            \"color\": \"Attention\",\n            \"isSubtle\": true\n        },\n        {\n            \"type\": \"ColumnSet\",\n            \"columns\": [\n                {\n                    \"type\": \"Column\",\n                    \"width\": \"stretch\",\n                    \"items\": [\n                        {\n                            \"type\": \"Image\",\n                            \"url\": \"https://seeklogo.com/images/M/microsoft-sentinel-azure-logo-28FA1B44A7-seeklogo.com.png\"\n                        }\n                    ]\n                },\n                {\n                    \"type\": \"Column\",\n                    \"width\": \"stretch\",\n                    \"items\": [\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"**ID** : @{triggerBody()?['object']?['properties']?['incidentNumber']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Lighter\",\n                            \"color\": \"Accent\"\n                        },\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"**Sevirity** : @{triggerBody()?['object']?['properties']?['severity']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Lighter\",\n                            \"color\": \"Accent\"\n                        },\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"**Status** : @{triggerBody()?['object']?['properties']?['status']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Bolder\",\n                            \"color\": \"Default\"\n                        }, \n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"**更新元** : @{triggerBody()?['incidentUpdates']?['updatedBy']?['source']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Lighter\",\n                            \"color\": \"Accent\"\n                        },\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"**更新者**(Sentinel経由のみ) : @{triggerBody()?['incidentUpdates']?['updatedBy']?['name']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Lighter\",\n                            \"color\": \"Accent\"\n                        },\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"**アサイン先** : @{triggerBody()?['object']?['properties']?['owner']?['assignedTo']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Lighter\",\n                            \"color\": \"Accent\"\n                        },\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"**インシデント分類** : @{triggerBody()?['object']?['properties']?['classification']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"default\",\n                            \"color\": \"default\"\n                        },\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"**インシデント分類の理由** : @{triggerBody()?['object']?['properties']?['classificationReason']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"default\",\n                            \"color\": \"default\"\n                        },\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \"**コメント**(Sentinel経由のみ) : @{triggerBody()?['object']?['properties']?['classificationComment']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"default\",\n                            \"color\": \"default\"\n                        },\n                        {\n                            \"type\": \"TextBlock\",\n                            \"text\": \" @{triggerBody()?['object']?['properties']?['description']}\",\n                            \"wrap\": true,\n                            \"size\": \"Default\",\n                            \"weight\": \"Lighter\",\n                            \"color\": \"Default\"\n                        },\n                        {\n                            \"type\": \"ActionSet\",\n                            \"actions\": [\n                                {\n                                    \"type\": \"Action.OpenUrl\",\n                                    \"title\": \"Open Microsoft Sentinel\",\n                                    \"url\": \"@{triggerBody()?['object']?['properties']?['incidentUrl']}\"\n                                }\n                            ]\n                        }\n                    ]\n                }\n            ]\n        }\n    ]\n}",
+                                                    "messageId": "@items('For_each')?['labelName']",
+                                                    "recipient": {
+                                                        "channelId": "",
+                                                        "groupId": ""
+                                                    }
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['teams']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/v1.0/teams/conversation/updateAdaptivecard/poster/@{encodeURIComponent('User')}/location/@{encodeURIComponent('Channel')}"
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {},
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "equals": [
+                                                    "@isInt(items('For_each')?['labelName'])",
+                                                    true
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "type": "If"
+                                }
+                            },
+                            "runAfter": {},
+                            "type": "Foreach"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]",
+                                "connectionName": "[variables('MicrosoftSentinelConnectionName')]",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                },
+                                "id": "[variables('MicrosoftSentinelConnectionApiId')]"
+                            },
+                            "teams": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('MicrosoftTeamsConnectionName'))]",
+                                "connectionName": "[variables('MicrosoftTeamsConnectionName')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/teams')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
