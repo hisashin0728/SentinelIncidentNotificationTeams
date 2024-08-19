@@ -9,7 +9,7 @@
 ![image](https://github.com/user-attachments/assets/1f1ea47a-cd3f-47b0-aa9f-6724943ae787)
 - インシデントクローズ時
   - インシデントクローズ処理時を Sentinel オートメーションより起動し、Teams メッセージの更新情報として通知します
-    - Defender XDR 側でクローズ処理を行った場合、仕様により Defender XDR ログインユーザー情報は出力されないた、代わりにインシデントの担当者アサイン情報を付与することを推奨します
+    - Defender XDR 側でクローズ処理を行った場合、仕様により Defender XDR ログインユーザー情報は出力されないため、代わりに**インシデントの担当者アサイン**を情報を付与することを推奨します
     - Sentinel 側でクローズ処理を行った場合、Teams メッセージ投稿内容を更新して、ステータス変更 / 更新者 / クローズ時の理由を情報として通知させています
 ![image](https://github.com/user-attachments/assets/5a5aa4d1-c44b-4df9-8547-e33991b3be3c)
 
