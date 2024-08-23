@@ -1,0 +1,287 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "metadata": {
+        "title": "CfSNotifyTeamsEnrichment",
+        "description": "This playbook nitify Copilot for Security Prompt Result to Microsoft Teams.",
+        "lastUpdateTime": "2024-08-23T00:00:00.000Z",
+        "tags": [ "Security" ],
+        "author": {
+            "name": "Hisashi Nakada"
+        }
+    },
+    "parameters": {
+        "PlayBookName": {
+            "defaultValue": "CfSNotifyTeamsEnrichment",
+            "type": "String"
+        }
+    },
+    "variables": {
+        "MicrosoftSentinelConnectionName":  "[concat('MicrosoftSentinel-', parameters('PlaybookName'))]",
+        "MicrosoftSentinelConnectionApiId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Azuresentinel')]",
+        "MicrosoftTeamsConnectionName":  "[concat('MicrosoftTeams-', parameters('PlaybookName'))]",
+        "CopilotForSecurityConnectionName":  "[concat('CopilotForSecurity-', parameters('PlaybookName'))]",
+        "CopilotForSecurityConnectionApiId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Securitycopilot')]"
+    },
+    "resources": [
+        {
+            "apiVersion": "2016-06-01",
+            "name": "[variables('MicrosoftSentinelConnectionName')]",
+            "type": "Microsoft.Web/connections",
+            "location": "[resourceGroup().location]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[variables('MicrosoftSentinelConnectionName')]",
+                "parameterValueType": "Alternative",
+                "api": {
+                    "id": "[variables('MicrosoftSentinelConnectionApiId')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[variables('MicrosoftTeamsConnectionName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "displayName": "[parameters('PlaybookName')]",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/teams')]"
+                }
+            }
+        },
+        {
+            "apiVersion": "2016-06-01",
+            "name": "[variables('CopilotForSecurityConnectionName')]",
+            "type": "Microsoft.Web/connections",
+            "location": "[resourceGroup().location]",
+            "kind": "V1",
+            "properties": {
+                "displayName": "[variables('CopilotForSecurityConnectionName')]",
+                "api": {
+                    "id": "[variables('CopilotForSecurityConnectionApiId')]"
+                }
+            }          
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('PlaybookName')]",
+            "location": "[resourceGroup().location]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "dependsOn":  [
+                "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]",
+                "[resourceId('Microsoft.Web/connections', variables('MicrosoftTeamsConnectionName'))]",
+                "[resourceId('Microsoft.Web/connections', variables('CopilotForSecurityConnectionName'))]"
+                ],
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Microsoft_Sentinel_incident": {
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "body": {
+                                    "callback_url": "@{listCallbackUrl()}"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                    }
+                                },
+                                "path": "/incident-creation"
+                            }
+                        }
+                    },
+                    "actions": {
+                        "For_each": {
+                            "foreach": "@triggerBody()?['object']?['properties']?['labels']",
+                            "actions": {
+                                "CheckIncidentLabel": {
+                                    "actions": {
+                                        "CfS-GetDefenderIncidentReport": {
+                                            "runAfter": {
+                                                "EntitiesURL": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": {
+                                                    "PromptContent": "Defender XDR ID : @{triggerBody()?['object']?['properties']?['providerIncidentId']} のインシデントレポートを作成してください"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['securitycopilot']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/process-prompt"
+                                            }
+                                        },
+                                        "CfS-GetIncidentGuidedResponse": {
+                                            "runAfter": {
+                                                "CfS-GetDefenderIncidentReport": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": {
+                                                    "PromptContent": "@{triggerBody()?['object']?['properties']?['providerIncidentId']} ",
+                                                    "SessionId": "@body('CfS-GetDefenderIncidentReport')?['sessionId']",
+                                                    "SkillName": "GetIncidentGuidedResponse"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['securitycopilot']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/process-prompt"
+                                            }
+                                        },
+                                        "EntitiesIP": {
+                                            "runAfter": {},
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/entities/ip"
+                                            }
+                                        },
+                                        "EntitiesURL": {
+                                            "runAfter": {
+                                                "EntitiesIP": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuresentinel']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/entities/url"
+                                            }
+                                        },
+                                        "TeamsRes1-IncidentReport": {
+                                            "runAfter": {
+                                                "CfS-GetIncidentGuidedResponse": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": {
+                                                    "messageBody": "{\n    \"type\": \"AdaptiveCard\",\n    \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n    \"version\": \"1.5\",\n    \"msteams\": {\n        \"width\": \"Full\"\n    },\n    \"body\": [\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"@{body('CfS-GetDefenderIncidentReport')?['skillName']}\",\n            \"wrap\": true,\n             \"size\": \"Medium\",\n            \"color\": \"warning\"\n        },\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"@{body('CfS-GetDefenderIncidentReport')?['EvaluationResultContent']}\",\n            \"wrap\": true,\n            \"size\": \"Default\",\n            \"color\": \"Default\"\n        }\n    ]\n}",
+                                                    "parentMessageId": "@items('For_each')?['labelName']",
+                                                    "recipient": {
+                                                        "channelId": "",
+                                                        "groupId": ""
+                                                    }
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['teams']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/v1.0/teams/conversation/replyWithAdaptivecard/poster/@{encodeURIComponent('User')}/location/@{encodeURIComponent('Channel')}"
+                                            }
+                                        },
+                                        "TeamsRes2-IncidentGuidedResponse": {
+                                            "runAfter": {
+                                                "TeamsRes1-IncidentReport": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "body": {
+                                                    "messageBody": "{\n    \"type\": \"AdaptiveCard\",\n    \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n    \"version\": \"1.5\",\n    \"msteams\": {\n        \"width\": \"Full\"\n    },\n    \"body\": [\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"@{body('CfS-GetIncidentGuidedResponse')?['skillName']}\",\n            \"wrap\": true,\n             \"size\": \"Medium\",\n            \"color\": \"warning\"\n        },\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"@{body('CfS-GetIncidentGuidedResponse')?['EvaluationResultContent']}\",\n            \"wrap\": true,\n            \"size\": \"Default\",\n            \"color\": \"Default\"\n        }\n    ]\n}",
+                                                    "parentMessageId": "@items('For_each')?['labelName']",
+                                                    "recipient": {
+                                                        "channelId": "",
+                                                        "groupId": ""
+                                                    }
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['teams']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "/v1.0/teams/conversation/replyWithAdaptivecard/poster/@{encodeURIComponent('User')}/location/@{encodeURIComponent('Channel')}"
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {},
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "equals": [
+                                                    "@isInt(items('For_each')?['labelName'])",
+                                                    true
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "type": "If"
+                                }
+                            },
+                            "runAfter": {},
+                            "type": "Foreach"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azuresentinel": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('MicrosoftSentinelConnectionName'))]",
+                                "connectionName": "[variables('MicrosoftSentinelConnectionName')]",
+                                "connectionProperties": {
+                                    "authentication": {
+                                        "type": "ManagedServiceIdentity"
+                                    }
+                                },
+                                "id": "[variables('MicrosoftSentinelConnectionApiId')]"
+                            },
+                            "teams": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('MicrosoftTeamsConnectionName'))]",
+                                "connectionName": "[variables('MicrosoftTeamsConnectionName')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/teams')]"
+                            },                          
+                            "securitycopilot": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('CopilotForSecurityConnectionName'))]",
+                                "connectionName": "[variables('CopilotForSecurityConnectionName')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/Securitycopilot')]"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
